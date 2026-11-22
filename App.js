@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView, View, Text, TextInput, Pressable, ScrollView, StyleSheet,
-  StatusBar, ActivityIndicator, useWindowDimensions, Animated
+  StatusBar, ActivityIndicator, useWindowDimensions, Animated, Easing
 } from 'react-native';
 import { Chess } from 'chess.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -427,11 +427,13 @@ export default function App() {
     const cell = boardSize / 8;
     const x = square => FILES.indexOf(square[0]) * cell;
     const y = square => (8 - Number(square[1])) * cell;
+    animationPosition.stopAnimation();
     animationPosition.setValue({ x: x(move.from), y: y(move.from) });
     setAnimatedPiece({ from: move.from, glyph: PIECES[piece.color + piece.type.toUpperCase()], color: piece.color });
     Animated.timing(animationPosition, {
       toValue: { x: x(move.to), y: y(move.to) },
-      duration: 260,
+      duration: 340,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true
     }).start(({ finished }) => {
       if (!finished) return;
@@ -506,24 +508,31 @@ export default function App() {
   }
 
   function reviewCompletedGame() {
-    const savedMoves = [...completedMovesRef.current];
-    if (!savedMoves.length) { setMessage('Play a game first, then review it.'); return; }
-    const headers = game.header();
-    const replay = new Chess(headers.FEN || undefined);
-    const plies = savedMoves.map((san, index) => {
-      const beforeFen = replay.fen();
-      const color = replay.turn();
-      const applied = replay.move(san);
-      if (!applied) throw new Error('Could not reconstruct completed move ' + (index + 1));
-      return { index: index + 1, fullMove: Math.floor(index / 2) + 1, color, san: applied.san, uci: applied.from + applied.to + (applied.promotion || ''), fen: beforeFen, afterFen: replay.fen() };
-    });
-    const result = timeoutSide ? (timeoutSide === 'w' ? '0-1' : '1-0') : game.isDraw() ? '1/2-1/2' : game.turn() === 'w' ? '0-1' : '1-0';
-    headers.White = headers.White || (playMode === 'pvp' ? 'Player 1' : 'You');
-    headers.Black = headers.Black || (playMode === 'pvp' ? 'Player 2' : selectedBot.name);
-    headers.Result = result;
-    const prepared = { headers, plies, finalFen: game.fen(), result, finalStatus: timeoutSide ? 'Timeout' : game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game complete' };
-    setImportedGame(prepared); setPgnAnalysis([]); setPgnProgress(0); setPgnError(''); setTab('Review'); setGame(new Chess(prepared.finalFen)); setHistory([...savedMoves]); setSelected(null); setTargets([]); setMessage('Your completed game is loaded. Stockfish review is starting.');
-    analyzeImportedGame(prepared);
+    try {
+      const savedMoves = [...completedMovesRef.current];
+      if (!savedMoves.length) { setMessage('Play a game first, then review it.'); return; }
+      const headers = game.header();
+      const replay = new Chess(headers.FEN || undefined);
+      const plies = [];
+      for (let index = 0; index < savedMoves.length; index += 1) {
+        const san = savedMoves[index];
+        const beforeFen = replay.fen();
+        const color = replay.turn();
+        const applied = replay.move(san);
+        if (!applied) throw new Error('Could not reconstruct completed move ' + (index + 1));
+        plies.push({ index: index + 1, fullMove: Math.floor(index / 2) + 1, color, san: applied.san, uci: applied.from + applied.to + (applied.promotion || ''), fen: beforeFen, afterFen: replay.fen() });
+      }
+      const result = timeoutSide ? (timeoutSide === 'w' ? '0-1' : '1-0') : game.isDraw() ? '1/2-1/2' : game.turn() === 'w' ? '0-1' : '1-0';
+      headers.White = headers.White || (playMode === 'pvp' ? 'Player 1' : 'You');
+      headers.Black = headers.Black || (playMode === 'pvp' ? 'Player 2' : selectedBot.name);
+      headers.Result = result;
+      const prepared = { headers, plies, finalFen: game.fen(), result, finalStatus: timeoutSide ? 'Timeout' : game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game complete' };
+      setImportedGame(prepared); setPgnAnalysis([]); setPgnProgress(0); setPgnError(''); setTab('Review'); setGame(new Chess(prepared.finalFen)); setHistory([...savedMoves]); setSelected(null); setTargets([]); setMessage('Your completed game is loaded. Stockfish review is starting.');
+      analyzeImportedGame(prepared);
+    } catch (error) {
+      setPgnError((error && error.message) || 'Could not prepare game review. Please try again.');
+      setMessage('Game review could not be opened. Your completed game is preserved.');
+    }
   }
 
 
