@@ -296,7 +296,8 @@ export default function App() {
   const LESSONS = useMemo(() => buildOpeningLessons(selectedOpening), [openingIndex]);
   const currentLesson = LESSONS[lessonIndex] || null;
   const boardSize = fullScreen && tab === 'Play' ? Math.max(240, Math.min(width - 20, 620)) : Math.min(width - 60, 430);
-  const board = game.board();
+  const board = useMemo(() => game.board(), [game]);
+  const targetSquares = useMemo(() => new Set(targets), [targets]);
 
   // Persist each tab's board snapshot independently; these hooks must remain
   // directly inside App (never inside evaluateWhite or another helper).
@@ -934,7 +935,7 @@ export default function App() {
                 {row.map((piece, c) => {
               const square = FILES[c] + String(8 - r);
               const light = (r + c) % 2 === 0;
-              const isTarget = targets.includes(square);
+              const isTarget = targetSquares.has(square);
               const isSelected = selected === square;
               const isPremoveSquare = !!pendingPremove && (pendingPremove.from === square || pendingPremove.to === square);
               return (
