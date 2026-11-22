@@ -241,6 +241,9 @@ async function getStockfishMove(fen, level, mode) {
 
 export default function App() {
   const { width } = useWindowDimensions();
+  const mainScrollRef = useRef(null);
+  const boardContentY = useRef(0);
+  const [scrollToBoardRequest, setScrollToBoardRequest] = useState(0);
   const [game, setGame] = useState(freshGame);
   const boardSnapshots = useRef({ Learn: { game: freshGame(), history: [] }, Play: { game: freshGame(), history: [] }, Review: { game: freshGame(), history: [] } });
   const [selected, setSelected] = useState(null);
@@ -307,6 +310,15 @@ export default function App() {
   }
 
 
+
+  useEffect(() => {
+    if (!scrollToBoardRequest) return;
+    const frame = requestAnimationFrame(() => {
+      const y = Math.max(0, boardContentY.current - 18);
+      mainScrollRef.current?.scrollTo({ y, animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollToBoardRequest]);
 
   useEffect(() => {
     let alive = true;
@@ -655,6 +667,7 @@ export default function App() {
     setMessage(tab === 'Play' ? (playMode === 'pvp' ? 'Offline Pass & Play. White moves first.' : 'New game. You are White; make the first move.') : 'New lesson: ' + selectedOpening.name + '. Start with ' + (LESSONS[0]?.san || 'the first move') + '.');
     setEngineLabel('Ready to play');
     setAnalysis(null);
+    if (tab === 'Play') setScrollToBoardRequest(request => request + 1);
   }
 
   function playLessonMove() {
@@ -762,7 +775,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar hidden={fullScreen && tab === 'Play'} barStyle="light-content" backgroundColor={COLORS.bg} />
-      <ScrollView contentContainerStyle={[styles.page, fullScreen && tab === 'Play' && styles.pageFullscreen]} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={mainScrollRef} contentContainerStyle={[styles.page, fullScreen && tab === 'Play' && styles.pageFullscreen]} showsVerticalScrollIndicator={false}>
         {!(fullScreen && tab === 'Play') && <View style={styles.header}>
           <View style={styles.brandBlock}>
             <Text style={styles.eyebrow}>THE CHESS TRAINING STUDIO</Text>
@@ -843,7 +856,7 @@ export default function App() {
           <Text style={styles.helper}>{selectedOpening.idea}</Text>
         </View>}
 
-        <View style={[styles.boardCard, fullScreen && tab === 'Play' && styles.boardCardFullscreen]}>
+        <View onLayout={event => { boardContentY.current = event.nativeEvent.layout.y; }} style={[styles.boardCard, fullScreen && tab === 'Play' && styles.boardCardFullscreen]}>
           {tab === 'Play' && <View style={styles.clockBar}>
             <View style={styles.clockPlayer}><Text style={styles.clockPlayerName}>{playMode === 'pvp' ? 'BLACK · PLAYER 2' : selectedBot.name.toUpperCase()}</Text><Text style={[styles.clockValue, game.turn() === 'b' && clockStarted && !timeoutSide && styles.clockActive]}>{formatClock(clock.b)}</Text></View>
             <View style={styles.clockPlayer}><Text style={styles.clockPlayerName}>{playMode === 'pvp' ? 'WHITE · PLAYER 1' : 'YOU · ' + playerElo + ' ELO'}</Text><Text style={[styles.clockValue, game.turn() === 'w' && clockStarted && !timeoutSide && styles.clockActive]}>{formatClock(clock.w)}</Text></View>
