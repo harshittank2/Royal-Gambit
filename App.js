@@ -961,7 +961,7 @@ export default function App() {
             ))}
             {animatedPiece && (
               <Animated.View pointerEvents="none" style={[styles.movingPiece, { width: boardSize / 8, height: boardSize / 8 }, { transform: animationPosition.getTranslateTransform() }]}>
-                <Text style={[styles.piece, { fontSize: Math.max(22, boardSize / 12), color: animatedPiece.color === 'w' ? activePieceColors.white : activePieceColors.black, textShadowColor: activePieceColors.shadow' }]}>{animatedPiece.glyph}</Text>
+                <Text style={[styles.piece, { fontSize: Math.max(22, boardSize / 12), color: animatedPiece.color === 'w' ? activePieceColors.white : activePieceColors.black, textShadowColor: activePieceColors.shadow }]}>{animatedPiece.glyph}</Text>
               </Animated.View>
             )}
           </View>
