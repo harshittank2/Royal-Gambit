@@ -1,3 +1,11 @@
+## Version 1.0.0
+
+- Delayed computer replies to create a premove window.
+- Premove queue support for computer games and Pass & Play.
+- Board color theme selector (Wood, Green, Blue, Purple, Slate).
+- Piece appearance color options (Classic, Ivory, Contrast). Theme choices persist locally.
+- Completed games can be sent directly to Review for automatic Stockfish analysis.
+
 # Royal Gambit ♛
 
 <p align="center"><img src="assets/royal-gambit-icon.png" width="220" alt="Royal Gambit king logo"></p>

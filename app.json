@@ -2,7 +2,7 @@
   "expo": {
     "name": "Royal Gambit",
     "slug": "royal-gambit",
-    "version": "0.9.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -10,7 +10,7 @@
     },
     "android": {
       "package": "com.harshit.chesscoachai",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "backgroundColor": "#082719",
         "foregroundImage": "assets/royal-gambit-icon.png"

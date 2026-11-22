@@ -281,6 +281,13 @@ export default function App() {
   const [pgnAnalysis, setPgnAnalysis] = useState([]);
   const [pgnAnalyzing, setPgnAnalyzing] = useState(false);
   const [pgnProgress, setPgnProgress] = useState(0);
+  const [boardTheme, setBoardTheme] = useState('Wood');
+  const [pieceTheme, setPieceTheme] = useState('Classic');
+  const [themesReady, setThemesReady] = useState(false);
+  const boardThemes = { Wood: ['#E3B878', '#89572F'], Green: ['#E8E3C9', '#587B50'], Blue: ['#D8E2EF', '#55789A'], Purple: ['#E8D9EE', '#846A98'], Slate: ['#D5D8DB', '#59636D'] };
+  const pieceThemes = { Classic: { white: '#FFF9EC', black: '#20382B', shadow: '#78684F' }, Ivory: { white: '#FFF6E1', black: '#3B3025', shadow: '#927F60' }, Contrast: { white: '#FFFFFF', black: '#111111', shadow: '#000000' } };
+  const activeSquares = boardThemes[boardTheme] || boardThemes.Wood;
+  const activePieceColors = pieceThemes[pieceTheme] || pieceThemes.Classic;
   const animationPosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const aiBusy = useRef(false);
   const selectedOpening = OPENINGS[openingIndex] || OPENINGS[0];
@@ -319,6 +326,11 @@ export default function App() {
     });
     return () => cancelAnimationFrame(frame);
   }, [scrollToBoardRequest]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('royal-gambit-themes-v1').then(raw => { if (raw) { const saved = JSON.parse(raw); if (boardThemes[saved.boardTheme]) setBoardTheme(saved.boardTheme); if (pieceThemes[saved.pieceTheme]) setPieceTheme(saved.pieceTheme); } }).catch(() => {}).finally(() => setThemesReady(true));
+  }, []);
+  useEffect(() => { if (!themesReady) return; AsyncStorage.setItem('royal-gambit-themes-v1', JSON.stringify({ boardTheme, pieceTheme })).catch(() => {}); }, [boardTheme, pieceTheme, themesReady]);
 
   useEffect(() => {
     let alive = true;
@@ -489,9 +501,30 @@ export default function App() {
     }
   }
 
-  async function analyzeImportedGame() {
-    if (!importedGame || pgnAnalyzing) return;
-    const maxPlies = Math.min(importedGame.plies.length, 60);
+  function reviewCompletedGame() {
+    const verbose = game.history({ verbose: true });
+    if (!verbose.length) { setMessage('Play a game first, then review it.'); return; }
+    const headers = game.header();
+    const replay = new Chess(headers.FEN || undefined);
+    const plies = verbose.map((move, index) => {
+      const beforeFen = replay.fen();
+      const color = replay.turn();
+      const applied = replay.move(move.san);
+      return { index: index + 1, fullMove: Math.floor(index / 2) + 1, color, san: applied.san, uci: applied.from + applied.to + (applied.promotion || ''), fen: beforeFen, afterFen: replay.fen() };
+    });
+    const result = timeoutSide ? (timeoutSide === 'w' ? '0-1' : '1-0') : game.isDraw() ? '1/2-1/2' : game.turn() === 'w' ? '0-1' : '1-0';
+    headers.White = headers.White || (playMode === 'pvp' ? 'Player 1' : 'You');
+    headers.Black = headers.Black || (playMode === 'pvp' ? 'Player 2' : selectedBot.name);
+    headers.Result = result;
+    const prepared = { headers, plies, finalFen: game.fen(), result, finalStatus: timeoutSide ? 'Timeout' : game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game complete' };
+    setImportedGame(prepared); setPgnAnalysis([]); setPgnProgress(0); setPgnError(''); setTab('Review'); setGame(new Chess(game.fen())); setHistory([...game.history()]); setSelected(null); setTargets([]); setMessage('Your completed game is loaded. Stockfish review is starting.');
+    analyzeImportedGame(prepared);
+  }
+
+
+  async function analyzeImportedGame(reviewSource = importedGame) {
+    if (!reviewSource || pgnAnalyzing) return;
+    const maxPlies = Math.min(reviewSource.plies.length, 60);
     setPgnAnalyzing(true);
     setPgnAnalysis([]);
     setPgnProgress(0);
@@ -500,7 +533,7 @@ export default function App() {
     try {
       let currentEval = null;
       for (let i = 0; i < maxPlies; i += 1) {
-        const ply = importedGame.plies[i];
+        const ply = reviewSource.plies[i];
         const before = currentEval || await analyzeFen(ply.fen, 10, engineMode);
         const after = await analyzeFen(ply.afterFen, 10, engineMode);
         currentEval = after;
@@ -514,7 +547,7 @@ export default function App() {
         setPgnAnalysis([...results]);
         setPgnProgress(i + 1);
       }
-      if (importedGame.plies.length > maxPlies) setPgnError('Analysed the first 60 half-moves to keep review time reasonable. The imported game contains ' + importedGame.plies.length + '.');
+      if (reviewSource.plies.length > maxPlies) setPgnError('Analysed the first 60 half-moves to keep review time reasonable. The imported game contains ' + reviewSource.plies.length + '.');
       setMessage('Stockfish review complete for ' + results.length + ' moves. Move classifications use the change in engine evaluation after each played move.');
     } catch (error) {
       setPgnError((error.message || 'Stockfish review failed.') + (engineMode === 'Local only' ? ' Try Auto mode or restart the app.' : ' Switch engine mode and retry.'));
@@ -555,21 +588,20 @@ export default function App() {
 
   function selectSquare(square) {
     if (game.isGameOver() || timeoutSide) return;
-    const queueingPremove = tab === 'Play' && playMode === 'computer' && game.turn() === 'b';
+    const premoveColor = playMode === 'pvp' ? (selected ? game.get(selected)?.color : game.turn() === 'w' ? 'b' : 'w') : 'w';
+    const queueingPremove = tab === 'Play' && ((playMode === 'computer' && game.turn() === 'b') || (playMode === 'pvp' && (selected ? game.get(selected)?.color !== game.turn() : game.get(square)?.color !== game.turn())));
     if (queueingPremove) {
       if (selected && targets.includes(square)) {
-        setPendingPremove({ from: selected, to: square, promotion: 'q' });
+        setPendingPremove({ from: selected, to: square, promotion: 'q', color: premoveColor });
         setSelected(null); setTargets([]);
         setMessage('Premove queued: ' + selected + ' → ' + square + '. It will play automatically if legal after the computer moves.');
         return;
       }
       const piece = game.get(square);
-      if (piece && piece.color === 'w') {
-        // Build a temporary White-to-move position only to preview destinations.
-        // Clear the en-passant target: it belongs to the side that just moved and
-        // becomes invalid when we flip the FEN turn field for a premove preview.
+      if (piece && piece.color === premoveColor) {
+        // Preview a move for the side that is not currently to move.
         const fields = game.fen().split(' ');
-        fields[1] = 'w';
+        fields[1] = premoveColor;
         fields[3] = '-';
         let options = [];
         try {
@@ -583,8 +615,8 @@ export default function App() {
         setSelected(square);
         setTargets(options);
         setMessage(options.length
-          ? 'Choose where your piece should move after the computer replies.'
-          : 'No safe premove destinations can be previewed here. Select another piece or wait for the computer move.');
+          ? 'Choose where your piece should move after the opponent replies.'
+          : 'No safe premove destinations can be previewed here. Select another piece or wait for the opponent move.');
       } else {
         setSelected(null);
         setTargets([]);
@@ -721,6 +753,8 @@ export default function App() {
         }
       }
       if (!cancelled && move) {
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        if (cancelled) return;
         const next = new Chess(game.fen());
         try {
           const played = next.move(move);
@@ -743,7 +777,7 @@ export default function App() {
   }, [tab, game, level, engineMode, playMode, selectedBotId, timeoutSide]);
 
   useEffect(() => {
-    if (!pendingPremove || tab !== 'Play' || playMode !== 'computer' || game.turn() !== 'w' || aiThinking || game.isGameOver() || timeoutSide) return;
+    if (!pendingPremove || tab !== 'Play' || game.turn() !== (playMode === 'computer' ? 'w' : pendingPremove.color || 'w') || aiThinking || game.isGameOver() || timeoutSide) return;
     const queued = pendingPremove;
     const next = new Chess(game.fen());
     try {
@@ -856,6 +890,15 @@ export default function App() {
           <Text style={styles.helper}>{selectedOpening.idea}</Text>
         </View>}
 
+        {tab === 'Play' && !fullScreen && <View style={styles.difficultyCard}>
+          <Text style={styles.sectionTitle}>Board & piece themes</Text>
+          <Text style={styles.helper}>Choose your board colour and piece appearance. Selections are saved.</Text>
+          <Text style={styles.themeLabel}>BOARD</Text>
+          <View style={styles.themeRow}>{Object.keys(boardThemes).map(name => <Pressable key={name} onPress={() => setBoardTheme(name)} style={[styles.themeChip, boardTheme === name && styles.themeChipActive]}><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][0] }]} /><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][1] }]} /><Text style={[styles.themeChipText, boardTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View>
+          <Text style={styles.themeLabel}>PIECES</Text>
+          <View style={styles.themeRow}>{Object.keys(pieceThemes).map(name => <Pressable key={name} onPress={() => setPieceTheme(name)} style={[styles.themeChip, pieceTheme === name && styles.themeChipActive]}><Text style={[styles.themeChipText, pieceTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View>
+        </View>}
+
         <View onLayout={event => { boardContentY.current = event.nativeEvent.layout.y; }} style={[styles.boardCard, fullScreen && tab === 'Play' && styles.boardCardFullscreen]}>
           {tab === 'Play' && <View style={styles.clockBar}>
             <View style={styles.clockPlayer}><Text style={styles.clockPlayerName}>{playMode === 'pvp' ? 'BLACK · PLAYER 2' : selectedBot.name.toUpperCase()}</Text><Text style={[styles.clockValue, game.turn() === 'b' && clockStarted && !timeoutSide && styles.clockActive]}>{formatClock(clock.b)}</Text></View>
@@ -898,15 +941,15 @@ export default function App() {
                   onPress={() => selectSquare(square)}
                   style={[styles.square, {
                     flex: 1,
-                    backgroundColor: isSelected ? '#d6c45e' : isPremoveSquare ? '#b7a05b' : light ? '#EFE6D2' : '#78927D'
+                    backgroundColor: isSelected ? '#d6c45e' : isPremoveSquare ? '#b7a05b' : light ? activeSquares[0] : activeSquares[1]
                   }]}
                 >
                   {isTarget && <View style={[styles.target, piece && styles.targetCapture]} />}
                   {!!piece && !(animatedPiece && animatedPiece.from === square) && (
                     <Text style={[styles.piece, {
                       fontSize: Math.max(22, boardSize / 12),
-                      color: piece.color === 'w' ? '#FFF9EC' : '#20382B',
-                      textShadowColor: piece.color === 'w' ? '#78684F' : '#D8D0B9'
+                      color: piece.color === 'w' ? activePieceColors.white : activePieceColors.black,
+                      textShadowColor: activePieceColors.shadow
                     }]}>{PIECES[piece.color + piece.type.toUpperCase()]}</Text>
                   )}
                   {c === 0 && <Text style={styles.rank}>{8 - r}</Text>}
@@ -918,7 +961,7 @@ export default function App() {
             ))}
             {animatedPiece && (
               <Animated.View pointerEvents="none" style={[styles.movingPiece, { width: boardSize / 8, height: boardSize / 8 }, { transform: animationPosition.getTranslateTransform() }]}>
-                <Text style={[styles.piece, { fontSize: Math.max(22, boardSize / 12), color: animatedPiece.color === 'w' ? '#FFF9EC' : '#20382B', textShadowColor: animatedPiece.color === 'w' ? '#78684F' : '#D8D0B9' }]}>{animatedPiece.glyph}</Text>
+                <Text style={[styles.piece, { fontSize: Math.max(22, boardSize / 12), color: animatedPiece.color === 'w' ? activePieceColors.white : activePieceColors.black, textShadowColor: activePieceColors.shadow' }]}>{animatedPiece.glyph}</Text>
               </Animated.View>
             )}
           </View>
@@ -1065,6 +1108,7 @@ export default function App() {
           )}
 
           {tab === 'Play' && fullScreen && <Text style={styles.fullscreenHint}>{clockStarted ? 'Clock running · ' + (game.turn() === 'w' ? 'White' : 'Black') + ' to move' : 'Choose a time control and tap Start game'}</Text>}
+          {(tab === 'Play' && (game.isGameOver() || timeoutSide)) && <Pressable onPress={reviewCompletedGame} style={styles.primaryButton}><Text style={styles.primaryText}>Review completed game · Stockfish</Text></Pressable>}
           <View style={styles.actions}>
             <Pressable onPress={undo} disabled={!history.length || aiThinking} style={[styles.secondaryButton, (!history.length || aiThinking) && styles.disabledButton]}>
               <Text style={styles.secondaryText}>↶ Undo</Text>
@@ -1156,6 +1200,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  themeLabel: { color: COLORS.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.4, marginTop: 6 },
+  themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  themeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 9, borderRadius: 10, backgroundColor: COLORS.panel2, borderWidth: 1, borderColor: COLORS.line },
+  themeChipActive: { borderColor: COLORS.gold, backgroundColor: '#2D3828' },
+  themeSwatch: { width: 10, height: 10, borderRadius: 2 },
+  themeChipText: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
+  themeChipTextActive: { color: COLORS.gold },
   safe: { flex: 1, backgroundColor: COLORS.bg },
   page: { paddingHorizontal: 17, paddingTop: 14, paddingBottom: 30, gap: 15, alignItems: 'center' },
   header: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
