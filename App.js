@@ -824,7 +824,9 @@ export default function App() {
             <Text style={styles.tagline}>Think clearly. Play beautifully.</Text>
           </View>
           <View style={styles.levelBadge}><Text style={styles.levelBadgeText}>♔  {playerElo} ELO</Text></View>
+          <Pressable onPress={() => setShowThemePanel(value => !value)} style={styles.settingsButton}><Text style={styles.settingsButtonText}>⚙ Settings</Text></Pressable>
         </View>}
+        {showThemePanel && !(fullScreen && tab === 'Play') && <View style={styles.settingsPanel}><Text style={styles.sectionTitle}>Settings · Themes</Text><Text style={styles.helper}>BOARD STYLE</Text><View style={styles.themeRow}>{Object.keys(boardThemes).map(name => <Pressable key={name} onPress={() => setBoardTheme(name)} style={[styles.themeChip, boardTheme === name && styles.themeChipActive]}><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][0] }]} /><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][1] }]} /><Text style={[styles.themeChipText, boardTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View><Text style={styles.helper}>PIECE STYLE</Text><View style={styles.themeRow}>{Object.keys(pieceThemes).map(name => <Pressable key={name} onPress={() => setPieceTheme(name)} style={[styles.themeChip, pieceTheme === name && styles.themeChipActive]}><Text style={[styles.themeChipText, pieceTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View><Pressable onPress={() => setShowThemePanel(false)} style={styles.settingsClose}><Text style={styles.timeApplyText}>Done ✓</Text></Pressable></View>}
 
 
 
@@ -847,8 +849,7 @@ export default function App() {
               <Pressable onPress={() => { const minutes = Math.max(1, Math.min(180, Number(customMinutes) || 10)); setTimeMinutes(minutes); setCustomMinutes(String(minutes)); resetClock(minutes, false); }} style={styles.timeApply}><Text style={styles.timeApplyText}>Set custom</Text></Pressable>
               <Pressable onPress={() => { restart(); resetClock(timeMinutes, true); }} style={styles.timeApply}><Text style={styles.timeApplyText}>Start game</Text></Pressable>
             </View>
-            <Pressable onPress={() => setShowThemePanel(value => !value)} style={styles.timeApply}><Text style={styles.timeApplyText}>{showThemePanel ? 'Hide Themes ▲' : '🎨 Themes · ' + boardTheme + ' / ' + pieceTheme}</Text></Pressable>
-            {showThemePanel && <View style={{ gap: 8, paddingTop: 6 }}><Text style={styles.helper}>BOARD STYLE</Text><View style={styles.themeRow}>{Object.keys(boardThemes).map(name => <Pressable key={name} onPress={() => setBoardTheme(name)} style={[styles.themeChip, boardTheme === name && styles.themeChipActive]}><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][0] }]} /><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][1] }]} /><Text style={[styles.themeChipText, boardTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View><Text style={styles.helper}>PIECE STYLE</Text><View style={styles.themeRow}>{Object.keys(pieceThemes).map(name => <Pressable key={name} onPress={() => setPieceTheme(name)} style={[styles.themeChip, pieceTheme === name && styles.themeChipActive]}><Text style={[styles.themeChipText, pieceTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View></View>}
+
             {playMode === 'pvp' ? <Text style={styles.helper}>Two players, one phone. White and Black take turns on this board. No internet or engine required.</Text> : <>
             <Text style={styles.helper}>Choose a personality. Elo is a target difficulty estimate; it is not a certified rating or an exact replica of a real player.</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.botRail}>
@@ -1202,6 +1203,10 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  settingsButton: { backgroundColor: COLORS.panel2, borderColor: COLORS.gold, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9, borderRadius: 12, marginLeft: 6 },
+  settingsButtonText: { color: COLORS.gold, fontSize: 11, fontWeight: '900' },
+  settingsPanel: { width: '100%', backgroundColor: COLORS.panel, borderColor: COLORS.gold, borderWidth: 1, borderRadius: 16, padding: 14, gap: 9 },
+  settingsClose: { alignSelf: 'flex-end', backgroundColor: COLORS.panel2, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, borderColor: COLORS.line, borderWidth: 1 },
   themeLabel: { color: COLORS.gold, fontSize: 10, fontWeight: '900', letterSpacing: 1.4, marginTop: 6 },
   themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   themeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 9, borderRadius: 10, backgroundColor: COLORS.panel2, borderWidth: 1, borderColor: COLORS.line },
