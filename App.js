@@ -245,6 +245,8 @@ export default function App() {
   const boardContentY = useRef(0);
   const [scrollToBoardRequest, setScrollToBoardRequest] = useState(0);
   const [game, setGame] = useState(freshGame);
+  const completedMovesRef = useRef([]);
+  const [showThemePanel, setShowThemePanel] = useState(false);
   const boardSnapshots = useRef({ Learn: { game: freshGame(), history: [] }, Play: { game: freshGame(), history: [] }, Review: { game: freshGame(), history: [] } });
   const [selected, setSelected] = useState(null);
   const [targets, setTargets] = useState([])
@@ -405,9 +407,10 @@ export default function App() {
   }
 
   function animatePosition(next, move, note, onFinish) {
+    if (move && tab === 'Play') completedMovesRef.current = [...completedMovesRef.current, move.san];
     if (!move) {
       setGame(next);
-      setHistory(next.history());
+      setHistory(tab === 'Play' ? [...completedMovesRef.current] : next.history());
       if (note) setMessage(note);
       if (onFinish) onFinish();
       return;
@@ -415,7 +418,7 @@ export default function App() {
     const piece = game.get(move.from);
     if (!piece) {
       setGame(next);
-      setHistory(next.history());
+      setHistory(tab === 'Play' ? [...completedMovesRef.current] : next.history());
       if (note) setMessage(note);
       if (onFinish) onFinish();
       return;
@@ -432,7 +435,7 @@ export default function App() {
     }).start(({ finished }) => {
       if (!finished) return;
       setGame(next);
-      setHistory(next.history());
+      setHistory(tab === 'Play' ? [...completedMovesRef.current] : next.history());
       setAnimatedPiece(null);
       if (note) setMessage(note);
       if (onFinish) onFinish();
@@ -502,14 +505,15 @@ export default function App() {
   }
 
   function reviewCompletedGame() {
-    const verbose = game.history({ verbose: true });
-    if (!verbose.length) { setMessage('Play a game first, then review it.'); return; }
+    const savedMoves = [...completedMovesRef.current];
+    if (!savedMoves.length) { setMessage('Play a game first, then review it.'); return; }
     const headers = game.header();
     const replay = new Chess(headers.FEN || undefined);
-    const plies = verbose.map((move, index) => {
+    const plies = savedMoves.map((san, index) => {
       const beforeFen = replay.fen();
       const color = replay.turn();
-      const applied = replay.move(move.san);
+      const applied = replay.move(san);
+      if (!applied) throw new Error('Could not reconstruct completed move ' + (index + 1));
       return { index: index + 1, fullMove: Math.floor(index / 2) + 1, color, san: applied.san, uci: applied.from + applied.to + (applied.promotion || ''), fen: beforeFen, afterFen: replay.fen() };
     });
     const result = timeoutSide ? (timeoutSide === 'w' ? '0-1' : '1-0') : game.isDraw() ? '1/2-1/2' : game.turn() === 'w' ? '0-1' : '1-0';
@@ -517,7 +521,7 @@ export default function App() {
     headers.Black = headers.Black || (playMode === 'pvp' ? 'Player 2' : selectedBot.name);
     headers.Result = result;
     const prepared = { headers, plies, finalFen: game.fen(), result, finalStatus: timeoutSide ? 'Timeout' : game.isCheckmate() ? 'Checkmate' : game.isDraw() ? 'Draw' : 'Game complete' };
-    setImportedGame(prepared); setPgnAnalysis([]); setPgnProgress(0); setPgnError(''); setTab('Review'); setGame(new Chess(game.fen())); setHistory([...game.history()]); setSelected(null); setTargets([]); setMessage('Your completed game is loaded. Stockfish review is starting.');
+    setImportedGame(prepared); setPgnAnalysis([]); setPgnProgress(0); setPgnError(''); setTab('Review'); setGame(new Chess(prepared.finalFen)); setHistory([...savedMoves]); setSelected(null); setTargets([]); setMessage('Your completed game is loaded. Stockfish review is starting.');
     analyzeImportedGame(prepared);
   }
 
@@ -663,6 +667,7 @@ export default function App() {
       return;
     }
     setGame(replay);
+    completedMovesRef.current = replay.history();
     setHistory(replay.history());
     setSelected(null);
     setTargets([]);
@@ -676,6 +681,7 @@ export default function App() {
     setSelectedBotId(bot.id);
     setLevel(bot.level);
     ratedGameKey.current = '';
+    completedMovesRef.current = [];
     const next = freshGame();
     setGame(next);
     setHistory([]);
@@ -688,6 +694,7 @@ export default function App() {
 
   function restart() {
     ratedGameKey.current = '';
+    completedMovesRef.current = [];
     if (tab === 'Play') resetClock(timeMinutes, false);
     const next = freshGame();
     setGame(next);
@@ -828,8 +835,8 @@ export default function App() {
               <Text style={styles.onlineTag}>{playMode === 'pvp' ? '● OFFLINE' : '● ENGINE'}</Text>
             </View>
             <View style={styles.levels}>
-              <Pressable onPress={() => { setPlayMode('computer'); resetClock(timeMinutes, false); ratedGameKey.current = ''; const next = freshGame(); setGame(next); setHistory([]); setSelected(null); setTargets([]); setEngineLabel('Ready to play'); setMessage('New game against the computer. You are White.'); }} style={[styles.levelButton, playMode === 'computer' && styles.levelButtonActive]}><Text style={[styles.levelText, playMode === 'computer' && styles.levelTextActive]}>vs Computer</Text></Pressable>
-              <Pressable onPress={() => { setPlayMode('pvp'); resetClock(timeMinutes, false); ratedGameKey.current = ''; const next = freshGame(); setGame(next); setHistory([]); setSelected(null); setTargets([]); setEngineLabel('Offline Pass & Play'); setMessage('Offline Pass & Play. White moves first.'); }} style={[styles.levelButton, playMode === 'pvp' && styles.levelButtonActive]}><Text style={[styles.levelText, playMode === 'pvp' && styles.levelTextActive]}>Pass & Play</Text></Pressable>
+              <Pressable onPress={() => { setPlayMode('computer'); resetClock(timeMinutes, false); ratedGameKey.current = ''; completedMovesRef.current = []; const next = freshGame(); setGame(next); setHistory([]); setSelected(null); setTargets([]); setEngineLabel('Ready to play'); setMessage('New game against the computer. You are White.'); }} style={[styles.levelButton, playMode === 'computer' && styles.levelButtonActive]}><Text style={[styles.levelText, playMode === 'computer' && styles.levelTextActive]}>vs Computer</Text></Pressable>
+              <Pressable onPress={() => { setPlayMode('pvp'); resetClock(timeMinutes, false); ratedGameKey.current = ''; completedMovesRef.current = []; const next = freshGame(); setGame(next); setHistory([]); setSelected(null); setTargets([]); setEngineLabel('Offline Pass & Play'); setMessage('Offline Pass & Play. White moves first.'); }} style={[styles.levelButton, playMode === 'pvp' && styles.levelButtonActive]}><Text style={[styles.levelText, playMode === 'pvp' && styles.levelTextActive]}>Pass & Play</Text></Pressable>
             </View>
             <Text style={styles.helper}>Time control</Text>
             <View style={styles.timeControls}>
@@ -840,6 +847,8 @@ export default function App() {
               <Pressable onPress={() => { const minutes = Math.max(1, Math.min(180, Number(customMinutes) || 10)); setTimeMinutes(minutes); setCustomMinutes(String(minutes)); resetClock(minutes, false); }} style={styles.timeApply}><Text style={styles.timeApplyText}>Set custom</Text></Pressable>
               <Pressable onPress={() => { restart(); resetClock(timeMinutes, true); }} style={styles.timeApply}><Text style={styles.timeApplyText}>Start game</Text></Pressable>
             </View>
+            <Pressable onPress={() => setShowThemePanel(value => !value)} style={styles.timeApply}><Text style={styles.timeApplyText}>{showThemePanel ? 'Hide Themes ▲' : '🎨 Themes · ' + boardTheme + ' / ' + pieceTheme}</Text></Pressable>
+            {showThemePanel && <View style={{ gap: 8, paddingTop: 6 }}><Text style={styles.helper}>BOARD STYLE</Text><View style={styles.themeRow}>{Object.keys(boardThemes).map(name => <Pressable key={name} onPress={() => setBoardTheme(name)} style={[styles.themeChip, boardTheme === name && styles.themeChipActive]}><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][0] }]} /><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][1] }]} /><Text style={[styles.themeChipText, boardTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View><Text style={styles.helper}>PIECE STYLE</Text><View style={styles.themeRow}>{Object.keys(pieceThemes).map(name => <Pressable key={name} onPress={() => setPieceTheme(name)} style={[styles.themeChip, pieceTheme === name && styles.themeChipActive]}><Text style={[styles.themeChipText, pieceTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View></View>}
             {playMode === 'pvp' ? <Text style={styles.helper}>Two players, one phone. White and Black take turns on this board. No internet or engine required.</Text> : <>
             <Text style={styles.helper}>Choose a personality. Elo is a target difficulty estimate; it is not a certified rating or an exact replica of a real player.</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.botRail}>
@@ -890,14 +899,7 @@ export default function App() {
           <Text style={styles.helper}>{selectedOpening.idea}</Text>
         </View>}
 
-        {tab === 'Play' && !fullScreen && <View style={styles.difficultyCard}>
-          <Text style={styles.sectionTitle}>Board & piece themes</Text>
-          <Text style={styles.helper}>Choose your board colour and piece appearance. Selections are saved.</Text>
-          <Text style={styles.themeLabel}>BOARD</Text>
-          <View style={styles.themeRow}>{Object.keys(boardThemes).map(name => <Pressable key={name} onPress={() => setBoardTheme(name)} style={[styles.themeChip, boardTheme === name && styles.themeChipActive]}><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][0] }]} /><View style={[styles.themeSwatch, { backgroundColor: boardThemes[name][1] }]} /><Text style={[styles.themeChipText, boardTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View>
-          <Text style={styles.themeLabel}>PIECES</Text>
-          <View style={styles.themeRow}>{Object.keys(pieceThemes).map(name => <Pressable key={name} onPress={() => setPieceTheme(name)} style={[styles.themeChip, pieceTheme === name && styles.themeChipActive]}><Text style={[styles.themeChipText, pieceTheme === name && styles.themeChipTextActive]}>{name}</Text></Pressable>)}</View>
-        </View>}
+
 
         <View onLayout={event => { boardContentY.current = event.nativeEvent.layout.y; }} style={[styles.boardCard, fullScreen && tab === 'Play' && styles.boardCardFullscreen]}>
           {tab === 'Play' && <View style={styles.clockBar}>
