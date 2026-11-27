@@ -282,6 +282,7 @@ export default function App() {
   const [importedGame, setImportedGame] = useState(null);
   const [pgnAnalysis, setPgnAnalysis] = useState([]);
   const [showReviewMoves, setShowReviewMoves] = useState(false);
+  const [reviewPhase, setReviewPhase] = useState('idle');
   const [pgnAnalyzing, setPgnAnalyzing] = useState(false);
   const [pgnProgress, setPgnProgress] = useState(0);
   const [boardTheme, setBoardTheme] = useState('Wood');
@@ -540,6 +541,7 @@ export default function App() {
   async function analyzeImportedGame(reviewSource = importedGame) {
     if (!reviewSource || pgnAnalyzing) return;
     const maxPlies = Math.min(reviewSource.plies.length, 60);
+    setReviewPhase('analyzing');
     setPgnAnalyzing(true);
     setPgnAnalysis([]);
     setPgnProgress(0);
@@ -568,8 +570,10 @@ export default function App() {
       setPgnError((error.message || 'Stockfish review failed.') + (engineMode === 'Local only' ? ' Try Auto mode or restart the app.' : ' Switch engine mode and retry.'));
     } finally {
       setPgnAnalyzing(false);
+      setReviewPhase(results.length ? 'report' : 'idle');
     }
   }
+
 
   async function analyzeCurrentPosition() {
     setAnalyzing(true);
@@ -998,7 +1002,7 @@ export default function App() {
                 </View>
                 <Text style={styles.helper}>{engineMode === 'Auto' ? 'Local Stockfish first; online Stockfish is the fallback.' : engineMode === 'Local only' ? 'Runs Stockfish on this phone. Internet is not required.' : 'Uses the online Stockfish service and requires internet.'}</Text>
               </View>
-              {!!pgnAnalysis.length && <View style={styles.reviewReportCard}><Text style={styles.reviewReportEyebrow}>ROYAL GAMBIT · GAME REPORT</Text><Text style={styles.reviewReportTitle}>Game Review</Text><View style={styles.reviewAccuracyRow}><View style={styles.reviewAccuracyCard}><Text style={styles.reviewAccuracyLabel} numberOfLines={1}>{importedGame?.headers?.White || 'White'}</Text><Text style={styles.reviewAccuracyValue}>{Math.max(0,Math.min(100,100-pgnAnalysis.filter(x=>x.color==='w').reduce((s,x)=>s+(x.evalLoss||0),0)/Math.max(1,pgnAnalysis.filter(x=>x.color==='w').length)*0.22)).toFixed(1)}%</Text><Text style={styles.reviewAccuracyCaption}>Accuracy estimate</Text></View><View style={styles.reviewAccuracyCard}><Text style={styles.reviewAccuracyLabel} numberOfLines={1}>{importedGame?.headers?.Black || 'Black'}</Text><Text style={styles.reviewAccuracyValue}>{Math.max(0,Math.min(100,100-pgnAnalysis.filter(x=>x.color==='b').reduce((s,x)=>s+(x.evalLoss||0),0)/Math.max(1,pgnAnalysis.filter(x=>x.color==='b').length)*0.22)).toFixed(1)}%</Text><Text style={styles.reviewAccuracyCaption}>Accuracy estimate</Text></View></View><View style={styles.reviewQuickStats}><View><Text style={styles.reviewQuickStatValue}>{pgnAnalysis.length}</Text><Text style={styles.reviewQuickStatLabel}>HALF-MOVES ANALYSED</Text></View><View><Text style={styles.reviewQuickStatValue}>{pgnAnalysis.filter(x=>['Best','Excellent','Good'].includes(x.classification)).length}</Text><Text style={styles.reviewQuickStatLabel}>GOOD+ MOVES</Text></View></View><Pressable style={styles.reviewStartButton} onPress={()=>setShowReviewMoves(v=>!v)}><Text style={styles.reviewStartButtonText}>{showReviewMoves?'HIDE MOVE REVIEW':'START REVIEW  →'}</Text></Pressable></View>}
+              {!!pgnAnalysis.length && <View style={styles.reviewReportCard}><Text style={styles.reviewReportEyebrow}>ROYAL GAMBIT · GAME REPORT</Text><Text style={styles.reviewReportTitle}>Game Review</Text><View style={styles.reviewAccuracyRow}><View style={styles.reviewAccuracyCard}><Text style={styles.reviewAccuracyLabel} numberOfLines={1}>{importedGame?.headers?.White || 'White'}</Text><Text style={styles.reviewAccuracyValue}>{Math.max(0,Math.min(100,100-pgnAnalysis.filter(x=>x.color==='w').reduce((s,x)=>s+(x.evalLoss||0),0)/Math.max(1,pgnAnalysis.filter(x=>x.color==='w').length)*0.22)).toFixed(1)}%</Text><Text style={styles.reviewAccuracyCaption}>Accuracy estimate</Text></View><View style={styles.reviewAccuracyCard}><Text style={styles.reviewAccuracyLabel} numberOfLines={1}>{importedGame?.headers?.Black || 'Black'}</Text><Text style={styles.reviewAccuracyValue}>{Math.max(0,Math.min(100,100-pgnAnalysis.filter(x=>x.color==='b').reduce((s,x)=>s+(x.evalLoss||0),0)/Math.max(1,pgnAnalysis.filter(x=>x.color==='b').length)*0.22)).toFixed(1)}%</Text><Text style={styles.reviewAccuracyCaption}>Accuracy estimate</Text></View></View><View style={styles.reviewQuickStats}><View><Text style={styles.reviewQuickStatValue}>{pgnAnalysis.length}</Text><Text style={styles.reviewQuickStatLabel}>HALF-MOVES ANALYSED</Text></View><View><Text style={styles.reviewQuickStatValue}>{pgnAnalysis.filter(x=>['Best','Excellent','Good'].includes(x.classification)).length}</Text><Text style={styles.reviewQuickStatLabel}>GOOD+ MOVES</Text></View></View><Pressable style={styles.reviewStartButton} onPress={()=>{ setShowReviewMoves(v=>!v); setReviewPhase('moves'); }}><Text style={styles.reviewStartButtonText}>{showReviewMoves?'HIDE MOVE REVIEW':'START REVIEW  →'}</Text></Pressable></View>}
               {!!pgnAnalysis.length && <View style={styles.reviewSummaryCard}>
                 <Text style={styles.reviewSummaryTitle}>GAME REVIEW SUMMARY</Text>
                 <Text style={styles.helper}>Move quality is estimated from Stockfish evaluation loss after each move.</Text>
@@ -1054,7 +1058,7 @@ export default function App() {
                   <View style={styles.importedSummary}>
                     <Text style={styles.importedTitle}>{importedGame.headers.White || 'White'} vs {importedGame.headers.Black || 'Black'}</Text>
                     <Text style={styles.helper}>{importedGame.headers.Event || 'Imported PGN'} · {importedGame.plies.length} half-moves · Result {importedGame.result}</Text>
-                    <Pressable onPress={analyzeImportedGame} disabled={pgnAnalyzing} style={styles.primaryButton}>
+                    <Pressable onPress={() => { setShowReviewMoves(false); setReviewPhase('analyzing'); analyzeImportedGame(importedGame); }} disabled={pgnAnalyzing} style={styles.primaryButton}>
                       {pgnAnalyzing ? <ActivityIndicator color="#10180d" /> : <Text style={styles.primaryText}>Analyse full game with Stockfish</Text>}
                     </Pressable>
                     {pgnAnalyzing && <Text style={styles.helper}>Analysing {pgnProgress}/{Math.min(importedGame.plies.length, 60)} moves with Stockfish… Keep this screen open.</Text>}
